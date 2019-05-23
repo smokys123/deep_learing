@@ -56,45 +56,58 @@ X = tf.placeholder(tf.float32, [None, 32, 32, 1], name='input_images')
 Y = tf.placeholder(tf.float32, [None, 32, 32, 1], name='output_images')
 
 #SR Model 1-layer
-W1 = tf.Variable(tf.random_normal([3, 3, 1, 64], stddev=0.01))
-B1 = tf.Variable(tf.zeros([64]))
-L1 = tf.nn.conv2d(X, W1, strides=[1, 1, 1, 1], padding='SAME')
-L1 = tf.nn.relu(L1+B1)
+with tf.name_scope('layer1'):
+    W1 = tf.Variable(tf.random_normal([3, 3, 1, 64], stddev=0.01))
+    B1 = tf.Variable(tf.zeros([64]))
+    L1 = tf.nn.conv2d(X, W1, strides=[1, 1, 1, 1], padding='SAME')
+    L1 = tf.nn.relu(L1+B1)
 # 2-layer
-W2 = tf.Variable(tf.random_normal([3, 3, 64, 64], stddev=0.01))
-B2 = tf.Variable(tf.zeros([64]))
-L2 = tf.nn.conv2d(L1, W2, strides=[1, 1, 1, 1], padding='SAME')
-L2 = tf.nn.relu(L2+B2)
+with tf.name_scope('layer2'):
+    W2 = tf.Variable(tf.random_normal([3, 3, 64, 64], stddev=0.01))
+    B2 = tf.Variable(tf.zeros([64]))
+    L2 = tf.nn.conv2d(L1, W2, strides=[1, 1, 1, 1], padding='SAME')
+    L2 = tf.nn.relu(L2+B2)
 # 3 - layer
-W3 = tf.Variable(tf.random_normal([3, 3, 64, 1], stddev=0.01))
-B3 = tf.Variable(tf.zeros([1]))
-L3 = tf.nn.conv2d(L2, W3, strides=[1, 1, 1, 1], padding='SAME')
-L3 = tf.nn.relu(L3+B3)
+with tf.name_scope('layer3'):
+    W3 = tf.Variable(tf.random_normal([3, 3, 64, 1], stddev=0.01))
+    B3 = tf.Variable(tf.zeros([1]))
+    L3 = tf.nn.conv2d(L2, W3, strides=[1, 1, 1, 1], padding='SAME')
+    L3 = tf.nn.relu(L3+B3)
 # loss
-cost = tf.reduce_mean(tf.square(L3-Y))
-# optimizer
-train_op = tf.train.AdamOptimizer(0.001).minimize(cost)
+with tf.name_scope('optimizer'):
+    cost = tf.reduce_mean(tf.square(L3-Y))
+    # optimizer
+    train_op = tf.train.AdamOptimizer(0.001).minimize(cost)
+    tf.summary.scalar('cost', cost)
 
 # Image와 Label 하나 열어보기
 with tf.Session() as sess:
     init = tf.global_variables_initializer()
+    global_step = 0
     sess.run(init)
     sess.run(train_iterator.initializer)
     sess.run(test_iterator.initializer)
-    for e in range(100):
+    merged = tf.summary.merge_all()
+    writer = tf.summary.FileWriter('./logs', sess.graph)
+    for e in range(10000):
         total_cost = 0
         for i in range(2):
             input_images, output_images = sess.run([next_train_images, next_train_labels])
             _, cost_val = sess.run([train_op, cost], feed_dict={X: input_images, Y: output_images})
             total_cost += cost_val
-        print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
+            summary = sess.run(merged, feed_dict={X: input_images, Y: output_images})
+            writer.add_summary(summary, global_step)
+            global_step+=1
+        if e % 100 == 0:
+            print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
 
-        total_psnr = 0
-        for _ in range(35):
-            test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
-            test_im = sess.run([L3], feed_dict={X: test_input_images, Y: test_output_images})
-            test_im = np.array(test_im).reshape((1, 32, 32, 1))
-            psnr_acc = tf.image.psnr(test_output_images, test_im, max_val=255)
-            psnr = sess.run(psnr_acc)
-            total_psnr += psnr[0]
-        print(total_psnr/35)
+
+    total_psnr = 0
+    for _ in range(35):
+        test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
+        test_im = sess.run([L3], feed_dict={X: test_input_images, Y: test_output_images})
+        test_im = np.array(test_im).reshape((1, 32, 32, 1))
+        psnr_acc = tf.image.psnr(test_output_images, test_im, max_val=255)
+        psnr = sess.run(psnr_acc)
+        total_psnr += psnr[0]
+    print(total_psnr/35)
