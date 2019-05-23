@@ -95,19 +95,20 @@ with tf.Session() as sess:
             input_images, output_images = sess.run([next_train_images, next_train_labels])
             _, cost_val = sess.run([train_op, cost], feed_dict={X: input_images, Y: output_images})
             total_cost += cost_val
-            summary = sess.run(merged, feed_dict={X: input_images, Y: output_images})
-            writer.add_summary(summary, global_step)
-            global_step+=1
-        if e % 100 == 0:
-            print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
+            if e % 100 == 0 and i == 1:
+                summary = sess.run(merged, feed_dict={X: input_images, Y: output_images})
+                writer.add_summary(summary, global_step)
+                global_step+=1
+                print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
 
+                total_psnr = 0
+                for _ in range(35):
+                    test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
+                    test_im = sess.run([L3], feed_dict={X: test_input_images, Y: test_output_images})
+                    test_im = np.array(test_im).reshape((1, 32, 32, 1))
+                    psnr_acc = tf.image.psnr(test_output_images, test_im, max_val=255)
+                    psnr = sess.run(psnr_acc)
+                    total_psnr += psnr[0]
+                tf.summary.scalar('psnr', total_psnr/35)
 
-    total_psnr = 0
-    for _ in range(35):
-        test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
-        test_im = sess.run([L3], feed_dict={X: test_input_images, Y: test_output_images})
-        test_im = np.array(test_im).reshape((1, 32, 32, 1))
-        psnr_acc = tf.image.psnr(test_output_images, test_im, max_val=255)
-        psnr = sess.run(psnr_acc)
-        total_psnr += psnr[0]
-    print(total_psnr/35)
+                print(e, total_psnr/35)
