@@ -25,6 +25,7 @@ def _crop_grayscale_function(image_path, label):
     label_image = tf.image.resize_images(images=resized_image, size=(32, 32), method=tf.image.ResizeMethod.BILINEAR)
     return input_image, label_image
 
+global_step = tf.Variable(0,trainable=False, name='global_step')
 
 train_input_list, test_input_list = get_images()
 train_inputs = tf.constant(train_input_list)
@@ -87,11 +88,15 @@ with tf.name_scope('psnr'):
     mean_psnr = tf.reduce_mean(psnr_acc)
     tf.summary.scalar('psnr', mean_psnr)
 
+
 # Image와 Label 하나 열어보기
 with tf.Session() as sess:
-    init = tf.global_variables_initializer()
-    global_step = 0
-    sess.run(init)
+    saver = tf.train.Saver(tf.global_variables())
+    ckpt = tf.train.get_checkpoint_state('./model')
+    if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+        saver.restore(sess, ckpt.model_checkpoint_path)
+    else:
+        sess.run(tf.global_variables_initializer())
     sess.run(train_iterator.initializer)
     sess.run(test_iterator.initializer)
     merged = tf.summary.merge_all()
@@ -102,13 +107,13 @@ with tf.Session() as sess:
             input_images, output_images = sess.run([next_train_images, next_train_labels])
             _, cost_val = sess.run([train_op, cost], feed_dict={X: input_images, Y: output_images})
             total_cost += cost_val
-        if e % 100 == 0:
+        if e % 10 == 0:
             test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
             psnr_sum = sess.run(mean_psnr, feed_dict={X: test_input_images, Y: test_output_images})
             summary = sess.run(merged, feed_dict={X: test_input_images, Y: test_output_images})
-            writer.add_summary(summary, global_step)
-            global_step+=1
+            writer.add_summary(summary, global_step=sess.run(global_step))
             print('epoch: ', '%d'%(e+1),
                   'avg_cost: ', '{:.3f}'.format(total_cost/128),
                   'psnr: ', '{:0.3f}'.format(psnr_sum))
-
+        if e % 10 == 0:
+            saver.save(sess, './model/cnn.ckpt', global_step=global_step)
