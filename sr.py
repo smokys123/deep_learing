@@ -102,14 +102,13 @@ with tf.Session() as sess:
             input_images, output_images = sess.run([next_train_images, next_train_labels])
             _, cost_val = sess.run([train_op, cost], feed_dict={X: input_images, Y: output_images})
             total_cost += cost_val
-            summary = sess.run(merged, feed_dict={X: input_images, Y: output_images})
-            writer.add_summary(summary, global_step)
-            global_step+=1
         if e % 100 == 0:
-            print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
-
             test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
             psnr_sum = sess.run(mean_psnr, feed_dict={X: test_input_images, Y: test_output_images})
-            writer.add_summary(psnr_sum, global_step)
+            summary = sess.run(merged, feed_dict={X: test_input_images, Y: test_output_images})
+            writer.add_summary(summary, global_step)
+            global_step+=1
+            print('epoch: ', '%d'%(e+1),
+                  'avg_cost: ', '{:.3f}'.format(total_cost/128),
+                  'psnr: ', '{:0.3f}'.format(psnr_sum))
 
-            print(e, psnr_sum)
