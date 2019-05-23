@@ -40,12 +40,16 @@ test_dataset = test_dataset.map(_crop_grayscale_function)
 
 #dataset = dataset.repeat()
 train_dataset = train_dataset.batch(128).repeat()
+test_dataset = test_dataset.batch(1).repeat()
 
 train_iterator = train_dataset.make_initializable_iterator()
 test_iterator = test_dataset.make_initializable_iterator()
 
 train_image_stacked, train_label_stacked = train_iterator.get_next()
+test_image_stacked, test_label_stacked = test_iterator.get_next()
+
 next_train_images, next_train_labels = train_iterator.get_next()
+next_test_images, next_test_labels = test_iterator.get_next()
 
 # placeholder
 X = tf.placeholder(tf.float32, [None, 32, 32, 1], name='input_images')
@@ -77,7 +81,7 @@ with tf.Session() as sess:
     sess.run(init)
     sess.run(train_iterator.initializer)
     sess.run(test_iterator.initializer)
-    for e in range(1000):
+    for e in range(100):
         total_cost = 0
         for i in range(2):
             input_images, output_images = sess.run([next_train_images, next_train_labels])
@@ -85,3 +89,12 @@ with tf.Session() as sess:
             total_cost += cost_val
         print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
 
+        total_psnr = 0
+        for _ in range(35):
+            test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
+            test_im = sess.run([L3], feed_dict={X: test_input_images, Y: test_output_images})
+            test_im = np.array(test_im).reshape((1, 32, 32, 1))
+            psnr_acc = tf.image.psnr(test_output_images, test_im, max_val=255)
+            psnr = sess.run(psnr_acc)
+            total_psnr += psnr[0]
+        print(total_psnr/35)
