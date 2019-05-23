@@ -40,7 +40,7 @@ test_dataset = test_dataset.map(_crop_grayscale_function)
 
 #dataset = dataset.repeat()
 train_dataset = train_dataset.batch(128).repeat()
-test_dataset = test_dataset.batch(1).repeat()
+test_dataset = test_dataset.batch(35).repeat()
 
 train_iterator = train_dataset.make_initializable_iterator()
 test_iterator = test_dataset.make_initializable_iterator()
@@ -80,6 +80,13 @@ with tf.name_scope('optimizer'):
     train_op = tf.train.AdamOptimizer(0.001).minimize(cost)
     tf.summary.scalar('cost', cost)
 
+with tf.name_scope('psnr'):
+    out = tf.convert_to_tensor(L3, dtype=tf.float32)
+    output = tf.reshape(out, [35, 32, 32, 1])
+    psnr_acc = tf.image.psnr(Y, output, max_val=255)
+    mean_psnr = tf.reduce_mean(psnr_acc)
+    tf.summary.scalar('psnr', mean_psnr)
+
 # Image와 Label 하나 열어보기
 with tf.Session() as sess:
     init = tf.global_variables_initializer()
@@ -95,20 +102,14 @@ with tf.Session() as sess:
             input_images, output_images = sess.run([next_train_images, next_train_labels])
             _, cost_val = sess.run([train_op, cost], feed_dict={X: input_images, Y: output_images})
             total_cost += cost_val
-            if e % 1 == 0 and i == 1:
-                print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
+            summary = sess.run(merged, feed_dict={X: input_images, Y: output_images})
+            writer.add_summary(summary, global_step)
+            global_step+=1
+        if e % 100 == 0:
+            print('epoch: ', '%d'%(e+1), 'avg. cost = ', '{:.3f}'.format(total_cost/128))
 
-                total_psnr = 0
-                for _ in range(35):
-                    test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
-                    test_im = sess.run([L3], feed_dict={X: test_input_images, Y: test_output_images})
-                    test_im = np.array(test_im).reshape((1, 32, 32, 1))
-                    psnr_acc = tf.image.psnr(test_output_images, test_im, max_val=255)
-                    psnr = sess.run(psnr_acc)
-                    total_psnr += psnr[0]
-                tf.summary.scalar('psnr', total_psnr/35)
-                summary = sess.run(merged, feed_dict={X: input_images, Y: output_images})
-                writer.add_summary(summary, global_step)
-                global_step+=1
+            test_input_images, test_output_images = sess.run([next_test_images, next_test_labels])
+            psnr_sum = sess.run(mean_psnr, feed_dict={X: test_input_images, Y: test_output_images})
+            writer.add_summary(psnr_sum, global_step)
 
-                print(e, total_psnr/35)
+            print(e, psnr_sum)
